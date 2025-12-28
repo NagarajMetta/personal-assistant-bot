@@ -1,0 +1,51 @@
+# DEPLOYMENT GUIDE
+
+I've set everything up for you! Here's what to do:
+
+## 🚀 DEPLOY IN 3 COMMANDS
+
+### Command 1 (Terminal 1): Start Bot
+```
+cd d:\AI\Bot
+python main.py
+```
+
+### Command 2 (Terminal 2): Start Ngrok
+```
+$ngrokPath = "$env:LOCALAPPDATA\ngrok\ngrok.exe"
+& $ngrokPath http 8000
+```
+
+### Command 3 (Terminal 3): Register & Test
+```
+cd d:\AI\Bot
+python ready_check.py
+```
+
+---
+
+## ✅ VERIFICATION
+
+When ready_check.py shows:
+```
+✅ Bot API is running
+✅ Connected to Telegram
+✅ Ngrok is running
+✅ Webhook registered successfully!
+```
+
+You're done! Open Telegram and message your bot @Aryan2021_bot
+
+---
+
+## 📁 FILES CREATED FOR YOU
+
+- `setup_ngrok.ps1` - Install Ngrok
+- `start_ngrok.ps1` - Start Ngrok  
+- `register_webhook.py` - Register with Telegram
+- `ready_check.py` - Verify everything works
+- `setup_and_deploy.py` - Auto setup (may need manual start)
+
+---
+
+See DEPLOY_NOW.md for detailed instructions!
