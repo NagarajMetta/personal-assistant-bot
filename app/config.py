@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Server
-    SERVER_HOST: str = "127.0.0.1"
-    SERVER_PORT: int = 8000
+    SERVER_HOST: str = "0.0.0.0"  # Allow external connections for cloud
+    SERVER_PORT: int = int(os.environ.get("PORT", 8000))  # Railway sets PORT
 
     # Database
     DATABASE_URL: str = "sqlite:///./bot_database.db"
