@@ -38,8 +38,19 @@ class AIService:
             text_lower = text.lower().strip()
             logger.debug(f"Lowercase text: '{text_lower}'")
             
-            # === PATTERN 1: Email related ===
-            email_keywords = ["email", "mail", "read", "unread", "inbox", "gmail", "messages"]
+            # === PATTERN 1: General Questions (Q&A) - CHECK FIRST! ===
+            # This catches most natural language queries
+            question_indicators = ["what", "who", "where", "when", "why", "how", "tell me", "explain", "describe", "?", "weather", "temperature", "price", "meaning", "define", "capital", "population", "distance", "calculate", "convert"]
+            if any(indicator in text_lower for indicator in question_indicators):
+                logger.info("Pattern match: General question detected - routing to Q&A")
+                return {
+                    "action": "ask_question",
+                    "parameters": {"question": text},
+                    "confidence": 90
+                }
+            
+            # === PATTERN 2: Email related ===
+            email_keywords = ["email", "mail", "unread", "inbox", "gmail"]
             if any(word in text_lower for word in email_keywords):
                 logger.info("Pattern match: Email keywords detected")
                 
@@ -71,7 +82,7 @@ class AIService:
                         "confidence": 90
                     }
             
-            # === PATTERN 2: Task/Schedule related ===
+            # === PATTERN 3: Task/Schedule related ===
             task_keywords = ["task", "todo", "reminder", "schedule", "remind", "alarm", "meeting", "appointment"]
             if any(word in text_lower for word in task_keywords):
                 logger.info("Pattern match: Task/schedule keywords detected")
@@ -81,8 +92,8 @@ class AIService:
                     "confidence": 85
                 }
             
-            # === PATTERN 3: Summary related ===
-            summary_keywords = ["summary", "daily", "overview", "report", "briefing", "news"]
+            # === PATTERN 4: Summary related ===
+            summary_keywords = ["summary", "daily summary", "overview", "report", "briefing"]
             if any(word in text_lower for word in summary_keywords):
                 logger.info("Pattern match: Summary keywords detected")
                 return {
@@ -91,7 +102,7 @@ class AIService:
                     "confidence": 80
                 }
             
-            # === PATTERN 4: Help/Information ===
+            # === PATTERN 5: Help/Information ===
             help_keywords = ["help", "commands", "what can you do", "abilities", "features"]
             if any(word in text_lower for word in help_keywords):
                 logger.info("Pattern match: Help keywords detected")
@@ -101,81 +112,20 @@ class AIService:
                     "confidence": 85
                 }
             
-            # === PATTERN 5: Unsupported features (but don't error) ===
-            unsupported_keywords = ["weather", "news", "sports", "jokes", "translate", "calculate", "convert"]
-            if any(word in text_lower for word in unsupported_keywords):
-                logger.info("Pattern match: Unsupported feature detected")
-                return {
-                    "action": "unsupported",
-                    "parameters": {"request": text},
-                    "confidence": 90
-                }
-            
-            # === DEFAULT: Use AI only if no keywords match ===
-            logger.info("No pattern match, falling back to AI")
-            
-            system_prompt = """You are a command parser. Determine if user wants:
-- read_emails: Check/read emails
-- send_email: Send an email
-- schedule_task: Schedule/create task or reminder
-- send_message: General message or unknown request
-- unknown: Cannot determine
-
-Reply ONLY with: {"action":"ACTION","parameters":{},"confidence":NUMBER}
-Example: {"action":"read_emails","parameters":{},"confidence":85}"""
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text},
-                ],
-                temperature=0.1,  # Very low for consistency
-                max_tokens=100,
-            )
-
-            content = response.choices[0].message.content.strip()
-            logger.debug(f"AI Response: {content}")
-            
-            # Clean markdown if present
-            if "```" in content:
-                content = content.split("```")[1] if len(content.split("```")) > 1 else content
-                if content.startswith("json"):
-                    content = content[4:]
-                content = content.strip()
-            
-            # Parse JSON
-            try:
-                parsed = json.loads(content)
-                action = parsed.get("action", "unknown")
-                
-                allowed_actions = ["read_emails", "send_email", "schedule_task", "send_message", "unknown", "unsupported"]
-                if action not in allowed_actions:
-                    logger.warning(f"Action '{action}' not allowed, using 'send_message'")
-                    action = "send_message"
-                    parsed["action"] = action
-                
-                parsed.setdefault("parameters", {})
-                parsed.setdefault("confidence", 50)
-                
-                logger.info(f"Command parsed: {action} (confidence: {parsed['confidence']})")
-                return parsed
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse AI JSON: {content} - {e}")
-                # If AI response is garbage, treat as send_message
-                return {
-                    "action": "send_message",
-                    "parameters": {"body": text},
-                    "confidence": 30
-                }
+            # === DEFAULT: Treat everything else as a question ===
+            logger.info("No specific pattern match - treating as general question")
+            return {
+                "action": "ask_question",
+                "parameters": {"question": text},
+                "confidence": 75
+            }
 
         except Exception as e:
             logger.error(f"Error in parse_command: {e}", exc_info=True)
             return {
-                "action": "unknown",
-                "parameters": {},
-                "confidence": 0
+                "action": "ask_question",
+                "parameters": {"question": text},
+                "confidence": 50
             }
 
     def summarize_email(self, subject: str, body: str, max_length: int = 200) -> str:
@@ -336,6 +286,42 @@ Respond with ONLY the priority level, nothing else."""
         except Exception as e:
             logger.error(f"Failed to summarize text: {e}")
             return text[:max_length] + "..."
+
+    def answer_question(self, question: str) -> str:
+        """
+        Answer a general question using OpenAI (real-time Q&A)
+
+        Args:
+            question: User's question
+
+        Returns:
+            AI-generated answer
+        """
+        try:
+            logger.info(f"Answering question: {question}")
+            
+            system_prompt = """You are a helpful personal assistant. Answer questions concisely and accurately.
+If asked about real-time data (weather, stock prices, current news), explain that you don't have access to real-time data but provide helpful general information.
+Keep responses brief but informative (max 200 words).
+Use emojis to make responses friendly."""
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question},
+                ],
+                temperature=0.7,
+                max_tokens=500,
+            )
+
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"Question answered successfully")
+            return answer
+
+        except Exception as e:
+            logger.error(f"Failed to answer question: {e}")
+            return "❌ Sorry, I couldn't process your question. Please try again."
 
     def generate_daily_summary(
         self,

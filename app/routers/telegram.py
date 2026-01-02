@@ -187,36 +187,18 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
             # For scheduling messages
             return "💬 Message scheduling coming soon!"
 
-        elif action == "unsupported":
-            # Feature not yet supported
-            feature = parameters.get("request", text)
-            return f"""❌ <b>Feature Not Available</b>
-
-You asked: <i>"{feature}"</i>
-
-I currently support:
-✅ 📧 Reading and sending emails
-✅ 📋 Managing tasks and reminders  
-✅ 📊 Daily summaries
-
-<b>Coming soon:</b>
-⏳ Weather information
-⏳ News updates
-⏳ Calculator & Conversions
-
-Try asking about emails, tasks, or schedules! 😊"""
+        elif action == "ask_question":
+            # General Q&A using OpenAI
+            question = parameters.get("question", text)
+            logger.info(f"Processing Q&A request: {question}")
+            answer = ai_service.answer_question(question)
+            return f"🤖 {answer}"
 
         elif action == "unknown":
-            # For unknown actions, provide helpful guidance
-            return """❓ I didn't quite understand that. 
-
-I can help with:
-📧 **Emails**: "Read my emails" or "Send an email to john@example.com"
-📋 **Tasks**: "Schedule a task for tomorrow"
-💬 **Messages**: "Send a message"
-📊 **Summary**: "Show me my daily summary"
-
-Try rephrasing your request or use /help for commands."""
+            # For unknown actions, try answering as a general question
+            logger.info(f"Unknown action - trying Q&A fallback for: {text}")
+            answer = ai_service.answer_question(text)
+            return f"🤖 {answer}"
 
         elif action == "schedule_task":
             task_name = parameters.get("task_name", "Scheduled Task")
@@ -225,12 +207,19 @@ Try rephrasing your request or use /help for commands."""
             return f"🕐 Task '{task_name}' scheduled for {scheduled_time}"
         
         else:
-            # Default response for other actions
-            return f"🤔 I understood you want to '{action}'. This feature is coming soon! Try /help for available options."
+            # DEFAULT: Answer any other message as a question using AI
+            logger.info(f"Default action - answering as Q&A: {text}")
+            answer = ai_service.answer_question(text)
+            return f"🤖 {answer}"
 
     except Exception as e:
         logger.error(f"Error processing natural language: {e}")
-        return "❌ Sorry, I had trouble understanding that. Please try again or use /help."
+        # Even on error, try to answer the question
+        try:
+            answer = ai_service.answer_question(text)
+            return f"🤖 {answer}"
+        except:
+            return "❌ Sorry, I had trouble understanding that. Please try again or use /help."
 
 
 @router.post("/command")
