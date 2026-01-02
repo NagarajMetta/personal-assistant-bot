@@ -40,13 +40,13 @@ class Settings(BaseSettings):
     ]
 
     # Telegram
-    TELEGRAM_BOT_TOKEN: str
+    TELEGRAM_BOT_TOKEN: str = ""  # Required - set in Railway Variables
     TELEGRAM_WEBHOOK_URL: Optional[str] = None
     TELEGRAM_WEBHOOK_SECRET: str = "your-secret-key"
-    TELEGRAM_USER_ID: int  # Your personal telegram user ID for commands
+    TELEGRAM_USER_ID: int = 0  # Required - set in Railway Variables
 
     # OpenAI
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = ""  # Required - set in Railway Variables
     OPENAI_MODEL: str = "gpt-3.5-turbo"
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: int = 1000
@@ -89,21 +89,27 @@ def get_settings() -> Settings:
 
 def setup_logging(settings: Settings) -> None:
     """Configure logging for the application"""
-    # Ensure logs directory exists
-    settings.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    # Create logger configuration
-    logging.basicConfig(
-        level=getattr(logging, settings.LOG_LEVEL),
-        format=settings.LOG_FORMAT,
-        handlers=[
-            logging.FileHandler(settings.LOG_FILE),
-            logging.StreamHandler(),
-        ],
-    )
-
-    logger.info(f"Logging configured at level: {settings.LOG_LEVEL}")
-    logger.info(f"Log file location: {settings.LOG_FILE}")
+    # For cloud deployment, use stdout only (no file)
+    if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PORT"):
+        logging.basicConfig(
+            level=getattr(logging, settings.LOG_LEVEL),
+            format=settings.LOG_FORMAT,
+            handlers=[logging.StreamHandler()],
+        )
+        logger.info("Cloud deployment detected - logging to stdout")
+    else:
+        # Local development - use file and stdout
+        settings.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(
+            level=getattr(logging, settings.LOG_LEVEL),
+            format=settings.LOG_FORMAT,
+            handlers=[
+                logging.FileHandler(settings.LOG_FILE),
+                logging.StreamHandler(),
+            ],
+        )
+        logger.info(f"Logging configured at level: {settings.LOG_LEVEL}")
+        logger.info(f"Log file location: {settings.LOG_FILE}")
 
 
 # Validate required settings on import
