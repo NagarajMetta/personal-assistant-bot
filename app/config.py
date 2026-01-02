@@ -115,18 +115,33 @@ def setup_logging(settings: Settings) -> None:
 # Validate required settings on import
 def validate_settings(settings: Settings) -> None:
     """Validate critical settings are configured"""
+    # Debug: Print all environment variables that start with TELEGRAM or OPENAI
+    print("=== DEBUG: Checking environment variables ===")
+    for key, value in os.environ.items():
+        if key.startswith(('TELEGRAM', 'OPENAI', 'PORT')):
+            # Mask sensitive values
+            masked = value[:10] + "..." if len(value) > 10 else value
+            print(f"  {key} = {masked}")
+    print("=== END DEBUG ===")
+    
     required = {
         "TELEGRAM_BOT_TOKEN": "Telegram bot token",
-        "OPENAI_API_KEY": "OpenAI API key",
-        "TELEGRAM_USER_ID": "Your Telegram user ID",
     }
 
     missing = []
     for field, description in required.items():
-        if not getattr(settings, field, None):
+        value = getattr(settings, field, None)
+        env_value = os.environ.get(field, "")
+        print(f"Checking {field}: settings={bool(value)}, env={bool(env_value)}")
+        if not value and not env_value:
             missing.append(f"{field} ({description})")
 
     if missing:
-        raise ValueError(
-            f"Missing required environment variables:\n" + "\n".join(missing)
-        )
+        # Just warn, don't crash - allow partial functionality
+        logger.warning(f"Missing environment variables: {missing}")
+        print(f"WARNING: Missing environment variables: {missing}")
+        # Only raise if TELEGRAM_BOT_TOKEN is missing (required for bot to work)
+        if "TELEGRAM_BOT_TOKEN" in str(missing):
+            raise ValueError(
+                f"Missing required environment variables:\n" + "\n".join(missing)
+            )
