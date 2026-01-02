@@ -10,6 +10,7 @@ from app.models.database import get_db, Message
 from app.services.telegram_service import TelegramService
 from app.services.ai_service import AIService
 from app.services.gmail_service import GmailService
+from app.services.realtime_service import RealtimeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telegram", tags=["telegram"])
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/telegram", tags=["telegram"])
 settings = get_settings()
 telegram_service = TelegramService()
 ai_service = AIService()
+realtime_service = RealtimeService()
 
 
 @router.post("/webhook")
@@ -91,8 +93,19 @@ I can help you with:
 • 📋 Managing tasks and reminders
 • 🕐 Scheduling messages
 • 📊 Daily summaries
+• 📈 Real-time stock prices
+• 🪙 Cryptocurrency prices
+• 🌤️ Weather updates
+• 🌍 World clock
 
 Type a command or describe what you need!
+
+<b>Examples:</b>
+• "What's the stock price of AAPL?"
+• "Bitcoin price"
+• "Time in Tokyo"
+• "Weather in London"
+• "What is machine learning?"
 
 Available commands:
 /emails - Read unread emails
@@ -193,6 +206,74 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
             logger.info(f"Processing Q&A request: {question}")
             answer = ai_service.answer_question(question)
             return f"🤖 {answer}"
+
+        elif action == "get_stock_price":
+            # Real-time stock price
+            symbol = parameters.get("symbol", "AAPL")
+            logger.info(f"Getting stock price for: {symbol}")
+            result = await realtime_service.get_stock_price(symbol)
+            
+            if result.get("success"):
+                change_emoji = "📈" if result["change"] >= 0 else "📉"
+                change_sign = "+" if result["change"] >= 0 else ""
+                return (
+                    f"📊 <b>{result['name']}</b> ({result['symbol']})\n\n"
+                    f"💰 Price: <b>${result['price']}</b> {result['currency']}\n"
+                    f"{change_emoji} Change: {change_sign}${result['change']} ({change_sign}{result['change_percent']}%)"
+                )
+            else:
+                return f"❌ {result.get('error', 'Failed to get stock price')}"
+
+        elif action == "get_crypto_price":
+            # Real-time cryptocurrency price
+            symbol = parameters.get("symbol", "BTC")
+            logger.info(f"Getting crypto price for: {symbol}")
+            result = await realtime_service.get_crypto_price(symbol)
+            
+            if result.get("success"):
+                change_emoji = "📈" if result["change_24h"] >= 0 else "📉"
+                change_sign = "+" if result["change_24h"] >= 0 else ""
+                return (
+                    f"🪙 <b>{result['name']}</b> ({result['symbol']})\n\n"
+                    f"💰 Price: <b>${result['price']:,.2f}</b> {result['currency']}\n"
+                    f"{change_emoji} 24h Change: {change_sign}{result['change_24h']:.2f}%"
+                )
+            else:
+                return f"❌ {result.get('error', 'Failed to get crypto price')}"
+
+        elif action == "get_time":
+            # Current time in a city
+            city = parameters.get("city", "New York")
+            logger.info(f"Getting time for: {city}")
+            result = realtime_service.get_time_in_city(city)
+            
+            if result.get("success"):
+                return (
+                    f"🕐 <b>Time in {result['city']}</b>\n\n"
+                    f"⏰ <b>{result['time']}</b> ({result['time_24']})\n"
+                    f"📅 {result['date']}\n"
+                    f"🌍 Timezone: {result['timezone']}"
+                )
+            else:
+                return f"❌ {result.get('error', 'Failed to get time')}"
+
+        elif action == "get_weather":
+            # Real-time weather
+            city = parameters.get("city", "New York")
+            logger.info(f"Getting weather for: {city}")
+            result = await realtime_service.get_weather(city)
+            
+            if result.get("success"):
+                return (
+                    f"🌤️ <b>Weather in {result['city']}, {result['country']}</b>\n\n"
+                    f"🌡️ Temperature: <b>{result['temperature_c']}°C</b> ({result['temperature_f']}°F)\n"
+                    f"🤗 Feels like: {result['feels_like_c']}°C\n"
+                    f"☁️ Conditions: {result['description']}\n"
+                    f"💧 Humidity: {result['humidity']}%\n"
+                    f"💨 Wind: {result['wind_kmph']} km/h"
+                )
+            else:
+                return f"❌ {result.get('error', 'Failed to get weather')}"
 
         elif action == "unknown":
             # For unknown actions, try answering as a general question

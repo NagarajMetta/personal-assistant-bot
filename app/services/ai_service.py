@@ -38,9 +38,102 @@ class AIService:
             text_lower = text.lower().strip()
             logger.debug(f"Lowercase text: '{text_lower}'")
             
-            # === PATTERN 1: General Questions (Q&A) - CHECK FIRST! ===
+            # === PATTERN 0: Real-time data queries - CHECK FIRST! ===
+            
+            # Stock price queries
+            stock_keywords = ["stock", "share price", "stock price", "ticker", "market price"]
+            if any(word in text_lower for word in stock_keywords):
+                logger.info("Pattern match: Stock price query detected")
+                # Extract stock symbol - look for common patterns
+                words = text.upper().split()
+                symbol = None
+                for i, word in enumerate(words):
+                    # Look for word after "stock" or standalone ticker symbols
+                    clean_word = ''.join(c for c in word if c.isalpha())
+                    if clean_word in ["AAPL", "GOOGL", "GOOG", "MSFT", "AMZN", "META", "TSLA", "NVDA", "NFLX", "AMD", "INTC", "IBM", "ORCL", "CRM", "ADBE", "PYPL", "UBER", "LYFT", "SPOT", "SNAP", "TWTR", "PINS", "ZM", "SHOP", "SQ", "COIN", "HOOD", "RBLX", "ABNB", "PLTR", "SOFI", "NIO", "RIVN", "LCID", "F", "GM", "TM", "BA", "DIS", "WMT", "TGT", "COST", "HD", "LOW", "NKE", "SBUX", "MCD", "KO", "PEP", "JNJ", "PFE", "MRNA", "BNTX", "UNH", "CVS", "WBA", "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA", "AXP"]:
+                        symbol = clean_word
+                        break
+                    # Check if previous word was "stock" or similar
+                    if i > 0 and any(kw in words[i-1].lower() for kw in ["stock", "price", "ticker"]):
+                        if len(clean_word) <= 5 and clean_word.isalpha():
+                            symbol = clean_word
+                            break
+                
+                if not symbol:
+                    # Try to find any word that looks like a ticker (2-5 uppercase letters)
+                    for word in words:
+                        clean_word = ''.join(c for c in word if c.isalpha())
+                        if 1 <= len(clean_word) <= 5 and clean_word.isalpha() and clean_word not in ["THE", "AND", "FOR", "WHAT", "PRICE", "STOCK", "SHOW", "GET", "CHECK"]:
+                            symbol = clean_word
+                            break
+                
+                return {
+                    "action": "get_stock_price",
+                    "parameters": {"symbol": symbol or "AAPL"},
+                    "confidence": 95
+                }
+            
+            # Cryptocurrency queries
+            crypto_keywords = ["bitcoin", "btc", "ethereum", "eth", "crypto", "cryptocurrency", "dogecoin", "doge", "solana", "sol", "cardano", "ada", "ripple", "xrp"]
+            if any(word in text_lower for word in crypto_keywords):
+                logger.info("Pattern match: Cryptocurrency query detected")
+                # Map keywords to symbols
+                symbol = "BTC"  # default
+                if "ethereum" in text_lower or "eth" in text_lower.split():
+                    symbol = "ETH"
+                elif "dogecoin" in text_lower or "doge" in text_lower:
+                    symbol = "DOGE"
+                elif "solana" in text_lower or "sol" in text_lower.split():
+                    symbol = "SOL"
+                elif "cardano" in text_lower or "ada" in text_lower.split():
+                    symbol = "ADA"
+                elif "ripple" in text_lower or "xrp" in text_lower:
+                    symbol = "XRP"
+                
+                return {
+                    "action": "get_crypto_price",
+                    "parameters": {"symbol": symbol},
+                    "confidence": 95
+                }
+            
+            # Time in city queries
+            time_keywords = ["time in", "current time in", "what time", "time now in", "local time"]
+            if any(word in text_lower for word in time_keywords):
+                logger.info("Pattern match: Time query detected")
+                # Extract city name
+                city = "New York"  # default
+                # Common patterns: "time in Tokyo", "what time is it in London"
+                for pattern in ["time in ", "time is it in ", "time now in "]:
+                    if pattern in text_lower:
+                        city = text_lower.split(pattern)[-1].strip().rstrip("?").strip()
+                        break
+                
+                return {
+                    "action": "get_time",
+                    "parameters": {"city": city},
+                    "confidence": 95
+                }
+            
+            # Weather queries
+            weather_keywords = ["weather in", "weather at", "temperature in", "forecast", "how hot", "how cold", "is it raining", "weather today"]
+            if any(word in text_lower for word in weather_keywords):
+                logger.info("Pattern match: Weather query detected")
+                # Extract city name
+                city = "New York"  # default
+                for pattern in ["weather in ", "weather at ", "temperature in ", "forecast for ", "forecast in "]:
+                    if pattern in text_lower:
+                        city = text_lower.split(pattern)[-1].strip().rstrip("?").strip()
+                        break
+                
+                return {
+                    "action": "get_weather",
+                    "parameters": {"city": city},
+                    "confidence": 95
+                }
+            
+            # === PATTERN 1: General Questions (Q&A) ===
             # This catches most natural language queries
-            question_indicators = ["what", "who", "where", "when", "why", "how", "tell me", "explain", "describe", "?", "weather", "temperature", "price", "meaning", "define", "capital", "population", "distance", "calculate", "convert"]
+            question_indicators = ["what", "who", "where", "when", "why", "how", "tell me", "explain", "describe", "?", "meaning", "define", "capital", "population", "distance", "calculate", "convert"]
             if any(indicator in text_lower for indicator in question_indicators):
                 logger.info("Pattern match: General question detected - routing to Q&A")
                 return {
