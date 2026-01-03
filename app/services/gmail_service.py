@@ -2,6 +2,8 @@
 
 import base64
 import logging
+import os
+import json
 from typing import List, Optional
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -46,6 +48,7 @@ class GmailService:
     def _get_credentials(self) -> UserCredentials:
         """
         Get or refresh Gmail API credentials using OAuth2
+        Supports both file-based tokens and environment variable tokens (for cloud deployment)
 
         Returns:
             Credentials: Valid Gmail API credentials
@@ -55,13 +58,25 @@ class GmailService:
 
         creds = None
 
-        # Load existing token if available
-        if token_path.exists():
+        # First, try to load from environment variable (for Railway/cloud deployment)
+        gmail_token_json = os.environ.get("GMAIL_TOKEN_JSON")
+        if gmail_token_json:
+            try:
+                token_data = json.loads(gmail_token_json)
+                creds = UserCredentials.from_authorized_user_info(
+                    token_data, self.settings.GMAIL_SCOPES
+                )
+                logger.info("Loaded Gmail credentials from environment variable")
+            except Exception as e:
+                logger.warning(f"Failed to load token from environment: {e}")
+
+        # If no env token, try file-based token
+        if not creds and token_path.exists():
             try:
                 creds = UserCredentials.from_authorized_user_file(
                     token_path, self.settings.GMAIL_SCOPES
                 )
-                logger.debug("Loaded existing Gmail credentials from token")
+                logger.debug("Loaded existing Gmail credentials from token file")
             except Exception as e:
                 logger.warning(f"Failed to load existing token: {e}")
 
