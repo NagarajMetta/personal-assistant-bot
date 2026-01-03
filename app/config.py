@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     DATABASE_PATH: Path = PROJECT_ROOT / "bot_database.db"
 
     # Gmail API
-    GMAIL_ENABLED: bool = False
+    GMAIL_ENABLED: bool = True
     GMAIL_CREDENTIALS_FILE: str = "credentials.json"
     GMAIL_TOKEN_FILE: str = "token.json"
     GMAIL_SCOPES: list = [

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings, setup_logging, validate_settings
 from app.models.database import init_db
 from app.models.schemas import HealthCheck
-from app.routers import telegram, scheduler
+from app.routers import telegram, scheduler, email
 from app.workers.scheduler import start_scheduler, stop_scheduler
 from app import __version__
 

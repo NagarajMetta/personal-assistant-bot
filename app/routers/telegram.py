@@ -20,6 +20,21 @@ telegram_service = TelegramService()
 ai_service = AIService()
 realtime_service = RealtimeService()
 
+# Initialize Gmail service with explicit logging
+gmail_service = None
+if settings.GMAIL_ENABLED:
+    try:
+        gmail_service = GmailService()
+        if gmail_service.service:
+            logger.info("Gmail service initialized successfully in telegram router")
+        else:
+            logger.warning("Gmail service created but service is None - check token.json")
+    except Exception as e:
+        logger.error(f"Failed to initialize Gmail service: {e}")
+        gmail_service = None
+else:
+    logger.info("Gmail is disabled in settings")
+
 
 @router.post("/webhook")
 async def telegram_webhook(update: dict, db: Session = Depends(get_db)):
@@ -115,16 +130,20 @@ Available commands:
 /help - Show this message"""
 
     elif command == "emails":
-        gmail = GmailService()
-        emails = gmail.get_unread_emails(max_results=3)
-
+        if not gmail_service or not gmail_service.service:
+            return "📧 Email service not configured. Please set up Gmail OAuth first."
+        
+        emails = gmail_service.get_unread_emails(max_results=5)
+        
         if not emails:
-            return "📧 No unread emails"
-
-        response = "📧 <b>Your latest emails:</b>\n\n"
-        for email in emails:
-            response += f"<b>From:</b> {email['sender']}\n"
-            response += f"<b>Subject:</b> {email['subject']}\n\n"
+            return "📭 No unread emails found!"
+        
+        response = f"📧 <b>Unread Emails ({len(emails)})</b>\n\n"
+        for i, email in enumerate(emails, 1):
+            sender = email.get('sender', 'Unknown')[:30]
+            subject = email.get('subject', 'No Subject')[:40]
+            response += f"{i}. <b>From:</b> {sender}\n   <b>Subject:</b> {subject}\n\n"
+        
         return response
 
     elif command == "tasks":
@@ -165,36 +184,67 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
 
         action = parsed.get("action", "unknown")
         parameters = parsed.get("parameters", {})
+        
+        logger.info(f"Parsed action: {action}, parameters: {parameters}")
 
         if action == "read_emails":
-            gmail = GmailService()
-            emails = gmail.get_unread_emails(max_results=3, summary_ai=ai_service)
-
+            if not gmail_service or not gmail_service.service:
+                return "📧 Email service not configured. Please set up Gmail OAuth first."
+            
+            emails = gmail_service.get_unread_emails(max_results=5)
+            
             if not emails:
-                return "📧 No unread emails"
-
-            response = "📧 <b>Unread emails:</b>\n\n"
-            for email in emails:
-                summary = email.get("summary", email["body"][:100])
-                response += f"<b>From:</b> {email['sender']}\n"
-                response += f"<b>Summary:</b> {summary}\n\n"
+                return "📭 No unread emails found!"
+            
+            response = f"📧 <b>Unread Emails ({len(emails)})</b>\n\n"
+            for i, email in enumerate(emails, 1):
+                sender = email.get('sender', 'Unknown')[:30]
+                subject = email.get('subject', 'No Subject')[:40]
+                response += f"{i}. <b>From:</b> {sender}\n   <b>Subject:</b> {subject}\n\n"
+            
             return response
 
         elif action == "send_email":
-            recipient = parameters.get("recipient")
-            subject = parameters.get("subject", "Message")
+            logger.info(f"Send email action triggered. gmail_service={gmail_service is not None}, service={gmail_service.service if gmail_service else None}")
+            
+            if not gmail_service or not gmail_service.service:
+                logger.error("Gmail service not available for sending email")
+                return "📧 Email service not configured. Please set up Gmail OAuth first."
+            
+            recipient = parameters.get("recipient", "")
             body = parameters.get("body", text)
-
-            if not recipient:
-                return "❌ I need a recipient email address"
-
-            gmail = GmailService()
-            success = gmail.send_email(recipient, subject, body)
-
+            
+            logger.info(f"Attempting to send email to: {recipient}")
+            
+            if not recipient or "@" not in recipient:
+                return "❌ Please provide a valid email address. Example: 'Send email to name@example.com saying Hello'"
+            
+            # Extract the actual message from the command
+            # Try to find text after the email address or use a default
+            subject = "Message from Personal Assistant Bot"
+            email_body = body
+            
+            # Try to extract actual message content
+            text_lower = text.lower()
+            for phrase in ["saying ", "with message ", "message: ", "body: ", "content: "]:
+                if phrase in text_lower:
+                    idx = text_lower.find(phrase) + len(phrase)
+                    email_body = text[idx:].strip()
+                    break
+            
+            if email_body == body:  # No specific content found
+                email_body = "This is a test email sent from Personal Assistant Bot."
+            
+            success = gmail_service.send_email(
+                recipient=recipient,
+                subject=subject,
+                body=email_body
+            )
+            
             if success:
-                return f"✅ Email sent to {recipient}"
+                return f"✅ Email sent successfully to {recipient}!"
             else:
-                return "❌ Failed to send email"
+                return f"❌ Failed to send email to {recipient}. Please try again."
 
         elif action == "send_message":
             # For scheduling messages
