@@ -218,9 +218,15 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
             if not recipient or "@" not in recipient:
                 return "❌ Please provide a valid email address. Example: 'Send email to name@example.com saying Hello'"
             
+            # Extract recipient name from email (part before @)
+            recipient_name = recipient.split("@")[0]
+            # Clean up the name - capitalize and replace dots/underscores with spaces
+            recipient_name = recipient_name.replace(".", " ").replace("_", " ").replace("-", " ")
+            recipient_name = " ".join(word.capitalize() for word in recipient_name.split())
+            
             # Extract the actual message from the command
             subject = "Message from Personal Assistant Bot"
-            email_body = None
+            message_content = None
             
             # Try to extract actual message content using multiple patterns
             text_lower = text.lower()
@@ -229,11 +235,11 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
             for phrase in ["saying ", "with message ", "message: ", "body: ", "content: ", "that ", "with body "]:
                 if phrase in text_lower:
                     idx = text_lower.find(phrase) + len(phrase)
-                    email_body = text[idx:].strip()
+                    message_content = text[idx:].strip()
                     break
             
             # Pattern 2: Extract text after the email address
-            if not email_body:
+            if not message_content:
                 import re
                 # Find text after email address
                 match = re.search(r'[\w\.-]+@[\w\.-]+\s+(.+)', text, re.IGNORECASE)
@@ -245,13 +251,23 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
                             remaining = remaining[len(prefix):].strip()
                             break
                     if remaining:
-                        email_body = remaining
+                        message_content = remaining
             
             # Pattern 3: If user just says "send email to X" without content, ask for content
-            if not email_body or len(email_body) < 3:
+            if not message_content or len(message_content) < 3:
                 return f"📝 What would you like to say in the email to {recipient}?\n\nExample: Send email to {recipient} saying Hello, how are you?"
             
-            logger.info(f"Email body extracted: {email_body[:50]}...")
+            # Format the email body properly
+            sender_name = "Personal Assistant Bot"
+            
+            email_body = f"""Hi {recipient_name},
+
+{message_content}
+
+Best regards,
+{sender_name}"""
+            
+            logger.info(f"Email body formatted for: {recipient_name}")
             
             success = gmail_service.send_email(
                 recipient=recipient,
@@ -260,7 +276,7 @@ async def _handle_natural_language(text: str, user_id: int, db: Session) -> str:
             )
             
             if success:
-                return f"✅ Email sent successfully to {recipient}!\n\n📧 <b>Message:</b> {email_body[:100]}{'...' if len(email_body) > 100 else ''}"
+                return f"✅ Email sent successfully to {recipient}!\n\n📧 <b>To:</b> {recipient_name}\n📝 <b>Message:</b> {message_content[:100]}{'...' if len(message_content) > 100 else ''}"
             else:
                 return f"❌ Failed to send email to {recipient}. Please try again."
 
